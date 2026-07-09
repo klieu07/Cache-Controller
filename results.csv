@@ -1,0 +1,10 @@
+label,module,num_sets,num_ways,capacity_lines,hits,misses,hit_rate_pct,amat_cycles
+assoc_w1,direct_mapped_cache,8,1,8,144,48,75.0,26.00
+assoc_w2,set_associative_cache,8,2,16,176,16,91.7,9.33
+assoc_w4,set_associative_cache,8,4,32,176,16,91.7,9.33
+assoc_w8,set_associative_cache,8,8,64,176,16,91.7,9.33
+size_s2,set_associative_cache,2,2,4,144,48,75.0,26.00
+size_s4,set_associative_cache,4,2,8,144,48,75.0,26.00
+size_s8,set_associative_cache,8,2,16,176,16,91.7,9.33
+size_s16,set_associative_cache,16,2,32,176,16,91.7,9.33
+size_s32,set_associative_cache,32,2,64,176,16,91.7,9.33
