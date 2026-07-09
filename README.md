@@ -1,92 +1,105 @@
-# L1 Data Cache Controller
+# A8 — L1 Data Cache Controller
 
-A Verilog RTL implementation of an L1 data cache — starting direct-mapped, extending to N-way set-associative. Built as a hands-on learning project (Project A8) to establish Verilog fundamentals (module hierarchy, FSMs, memory interfaces, testbench methodology) ahead of a future RISC-V CPU project.
+A direct-mapped and N-way set-associative L1 data cache, written in Verilog and verified with Verilator. Built as a structured, from-scratch hardware design project — the goal was deep conceptual understanding of RTL design (module hierarchy, FSMs, memory interfaces, testbench methodology), not just a working simulation.
 
-## Status
-
-🚧 **In progress — Day 1 of 7**
-
-Currently working on address-splitting logic and a minimal single-line cache that can hit and miss.
-
-## Scope
-
-- One L1 data cache. No CPU, no full memory system.
-- Phase order: direct-mapped working and verified first, then extended to N-way set-associative.
-- Policies: write-back with write-allocate, LRU (pseudo-LRU for 4-way+) replacement.
-- Verification is part of the deliverable — a trace-driven testbench with hit/miss statistics is required, not optional.
-
-## Address Breakdown
-
-Every memory address is sliced into three fields:
-
-```
-31                                     0
-+----------------+--------+------------+
-|      TAG       | INDEX  |   OFFSET   |
-+----------------+--------+------------+
-
-OFFSET = which byte within the cache line
-INDEX  = which set the line maps to
-TAG    = the rest, stored to confirm identity on a hit
-```
-
-*(Note: a single-line cache, as built on Day 1, has no INDEX field — every address maps to the one line. INDEX becomes meaningful starting Day 2, once multiple cache lines exist.)*
-
-## Design Decisions
-
-| Decision | Choice |
-| --- | --- |
-| Language | Verilog-2001 |
-| Simulator | Verilator (primary) / Icarus Verilog |
-| Waveform viewer | GTKWave |
-| Mapping strategy | Direct-mapped → N-way set-associative |
-| Write policy | Write-back, write-allocate |
-| Replacement policy | LRU (true for 2-way, pseudo-LRU for 4-way+) |
-| Read path latency | *TBD — document once decided (Day 1/2)* |
-
-## Repository Structure
+## Project structure
 
 ```
 cache-controller/
-├── rtl/              # Design files (synthesizable Verilog)
-├── tb/               # Testbenches (simulation-only)
-├── sim/              # Simulation outputs — waveforms (.vcd), compiled binaries
-├── scripts/          # Python scripts for plots, trace generation
-├── docs/             # Notes, diagrams, results
+├── rtl/
+│   ├── single_line_cache.v       Day 1 — single-line cache, no index field
+│   ├── address_decoder.v         tag/index/word_sel decomposition, reused everywhere
+│   ├── direct_mapped_cache.v      Day 2/3 — direct-mapped, read + write, write-back
+│   └── set_associative_cache.v   Day 4 — N-way set-associative, exact LRU
+├── tb/
+│   ├── tb_single_line_cache.v
+│   ├── mem_model.v                behavioral memory stub (testbench only)
+│   ├── tb_direct_mapped_cache.v
+│   ├── tb_set_associative_cache.v
+│   ├── tb_trace_driven.v          Day 5 — generic trace-driven testbench
+│   └── trace_random1.txt          Day 5 — 192-op synthetic access trace
+├── sweep.sh                       Day 6 — builds/runs a 9-point parameter sweep
+├── plot_hit_rate.py                Day 6 — turns a results.csv into a plot
+├── build/                         gitignored — Verilator output, waveforms
 └── README.md
 ```
 
-## Roadmap
+## Address breakdown
 
-| Day | Focus | Deliverable |
-| --- | --- | --- |
-| 1 | Environment + address math | Single-line cache that can hit and miss |
-| 2 | Direct-mapped read path | Full tag/valid/data arrays, hit detection, directed testbench |
-| 3 | Write path + write-back | Dirty bit, write path, write-back-on-eviction |
-| 4 | Set-associative + LRU | N-way parameterization, tag comparators, LRU |
-| 5 | Trace-driven testbench | Hit/miss statistics, AMAT calculation |
-| 6 | Analysis + plots | Hit rate vs. size/associativity sweep, plotted in Python |
-| 7 | Package | Repo cleanup, this README finalized, waveform screenshots |
+Every address is split into three fields, computed once in `address_decoder.v` and reused by both cache designs:
+
+```
+| 31                                    0 |
++----------------+--------+--------------+
+|      TAG       | INDEX  |    OFFSET    |
++----------------+--------+--------------+
+```
+
+- **OFFSET** — `$clog2(LINE_BYTES)` bits. Byte offset within a line; the top bits of this field additionally select which word within the line (`word_sel`).
+- **INDEX** — `$clog2(NUM_SETS)` bits. Which set the address maps to. `single_line_cache.v` has zero index bits (exactly one line, no set concept at all).
+- **TAG** — everything left over (`ADDR_WIDTH - INDEX_BITS - OFFSET_BITS`). Stored per line, compared on every access to confirm identity on a hit.
+
+With the project's default parameters (`ADDR_WIDTH=32`, `LINE_BYTES=16`, `NUM_SETS=8`): OFFSET=4 bits, INDEX=3 bits, TAG=25 bits.
+
+Associativity (`NUM_WAYS`) does **not** change this split — it only changes how many candidate lines exist per set. A conflict miss avoided by adding ways is not the same mechanism as a capacity miss avoided by adding sets; see the Day 6 results below for why that distinction matters.
+
+## Policies implemented
+
+- **Write-back** — writes only update the cache; a `dirty_array` bit per line tracks whether main memory is stale.
+- **Write-allocate** — on a write miss, the line is fetched first, then the store is spliced into the just-fetched line in the same cycle (see `set_associative_cache.v`'s `S_REFILL` state).
+- **Write-back on eviction, only if dirty** — a clean victim is simply overwritten; a dirty victim is drained to memory first via a dedicated `S_WRITEBACK` FSM state, verified in Day 3 by forcing an eviction and confirming the write-back log line plus a later re-fetch returning the written-back value.
+- **Replacement: exact LRU via age counters** — each set's ways carry a permutation of `0..NUM_WAYS-1`; the accessed way jumps to most-recent, everything more recent than it shifts down one. Updated on every access, hit or miss-fill, not just misses. An empty (invalid) way is always preferred over evicting a valid one. See the Day 4 study PDF for why this is *exact* LRU rather than the cheaper tree-based pseudo-LRU real 4-way+ caches typically use.
 
 ## Results
 
-*(To be filled in as of Day 5–6: hit rate, miss rate, AMAT, and the hit-rate-vs-size/associativity plot.)*
+**Directed trace (Days 2–4)** — a 7-step trace designed to force a conflict (two addresses aliasing to the same set):
 
-## Running the Simulation
+| Cache | Hits | Misses | Hit rate |
+|---|---|---|---|
+| Direct-mapped | 3 | 4 | 42.9% |
+| 2-way set-associative | 4 | 3 | 57.1% |
+
+**Trace-driven (Day 5)** — 192-op synthetic trace, 3 sequential passes over a 64-word footprint:
+
+| Cache | Hits | Misses | Hit rate | AMAT (miss penalty = 100 cycles) |
+|---|---|---|---|---|
+| Direct-mapped (8 sets, 1 way = 8-line capacity) | 144 | 48 | 75.0% | 26.00 cycles |
+| 2-way set-associative (8 sets, 2 ways = 16-line capacity) | 176 | 16 | 91.7% | 9.33 cycles |
+
+**Sweep (Day 6)** — measured via `sweep.sh` across 9 configurations; see `hit_rate_vs_config_measured.png`. Headline finding: for this trace, hit rate is a function of **total capacity** (`NUM_SETS x NUM_WAYS`) alone — the associativity sweep and the cache-size sweep collapse onto the identical curve, with a hard threshold at 16 lines (the trace's footprint). Below it: 75.0% forever. At or above it: 91.7%, with zero further gain from over-provisioning. This is a different bottleneck than the Day 2–4 trace exercised (that one isolated *conflict* misses via address aliasing; this one isolates *capacity* misses via a uniform sequential scan) — two traces were needed because one trace can't reveal both stories at once.
+
+## Waveforms
+
+![single_line_cache waveform](images/single_line_cache_waveform.png)
+
+*(Captured from `tb_single_line_cache.vcd` in GTKWave — replace this file with your own screenshot.)*
+
+## Running the simulations
+
+All commands assume you're in the repo root and have Verilator installed (`verilator --version` to check).
 
 ```bash
-# Verilator (primary)
-verilator --binary tb/tb_single_line_cache.v rtl/single_line_cache.v
-./obj_dir/Vtb_single_line_cache
+# Day 1
+verilator --binary --timing --trace -Wall --Wno-fatal --top-module tb_single_line_cache rtl/single_line_cache.v tb/tb_single_line_cache.v --Mdir build/obj_single_line
+./build/obj_single_line/Vtb_single_line_cache
 
-# or Icarus Verilog
-iverilog -o sim/single_line_cache tb/tb_single_line_cache.v rtl/single_line_cache.v
-vvp sim/single_line_cache
+# Day 2/3 — direct-mapped
+verilator --binary --timing --trace -Wall --Wno-fatal --top-module tb_direct_mapped_cache rtl/address_decoder.v rtl/direct_mapped_cache.v tb/mem_model.v tb/tb_direct_mapped_cache.v --Mdir build/obj_direct_mapped
+./build/obj_direct_mapped/Vtb_direct_mapped_cache
 
-# View waveform
-gtkwave sim/*.vcd
+# Day 4 — 2-way set-associative
+verilator --binary --timing --trace -Wall --Wno-fatal --top-module tb_set_associative_cache rtl/address_decoder.v rtl/set_associative_cache.v tb/mem_model.v tb/tb_set_associative_cache.v --Mdir build/obj_set_assoc
+./build/obj_set_assoc/Vtb_set_associative_cache
+
+# Day 5 — trace-driven (either cache)
+verilator --binary --timing --trace -Wall --Wno-fatal --top-module tb_trace_driven rtl/address_decoder.v rtl/direct_mapped_cache.v tb/mem_model.v tb/tb_trace_driven.v --Mdir build/obj_trace_direct
+./build/obj_trace_direct/Vtb_trace_driven
+
+# Day 6 — full parameter sweep
+chmod +x sweep.sh && ./sweep.sh
+python3 plot_hit_rate.py results.csv
 ```
 
-## Part of a Larger Sequence
+## What this hands off to A1 (RISC-V CPU)
 
-This project is the first in a chip-design track and is fully self-contained. It feeds forward into **Project A1 (RISC-V CPU)** by establishing module hierarchy, the testbench-and-verify discipline, and a working mental model of memory interfaces and FSM behavior — exactly what the CPU's MEM stage will interact with.
+Confidence with module hierarchy and parameterization, the testbench-and-verify discipline (predict before you run, at both the per-op and aggregate/statistical level), and a working mental model of a memory interface and FSM behavior — exactly what the CPU's MEM stage will talk to.
