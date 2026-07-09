@@ -5,9 +5,12 @@ module tb_trace_driven;
     localparam ADDR_WIDTH = 32;
     localparam DATA_WIDTH = 32;
     localparam LINE_BYTES = 16;
-    localparam NUM_SETS   = 8;
-    localparam NUM_WAYS   = 2;   // only used when USE_SET_ASSOC is defined
-    localparam LATENCY    = 4;
+    // NUM_SETS/NUM_WAYS are `parameter` (not `localparam`) specifically so a
+    // Day 6 sweep script can override them per run via Verilator's -G flag,
+    // e.g. -GNUM_SETS=16 -GNUM_WAYS=4, with no source edits between runs.
+    parameter NUM_SETS   = 8;
+    parameter NUM_WAYS   = 2;   // only used when USE_SET_ASSOC is defined
+    localparam LATENCY   = 4;
 
     localparam HIT_TIME_CYCLES    = 1;
     localparam MISS_PENALTY_CYCLES = 100;
