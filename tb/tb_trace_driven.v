@@ -121,9 +121,9 @@ module tb_trace_driven;
         $display("--- tb_trace_driven: direct_mapped_cache ---");
 `endif
 
-        fd = $fopen("trace_seq3.txt", "r");
+        fd = $fopen("tb/trace_random1.txt", "r");
         if (fd == 0) begin
-            $display("ERROR: could not open trace_seq3.txt (run from the tb/ directory, or adjust the path)");
+            $display("ERROR: could not open tb/trace_random1.txt -- this path assumes you run the simulation binary from your repo root (cache-controller/), matching every other command in this project");
             $finish;
         end
 
