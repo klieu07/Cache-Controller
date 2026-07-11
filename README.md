@@ -20,6 +20,9 @@ cache-controller/
 │   └── trace_random1.txt          Day 5 — 192-op synthetic access trace
 ├── sweep.sh                       Day 6 — builds/runs a 9-point parameter sweep
 ├── plot_hit_rate.py                Day 6 — turns a results.csv into a plot
+├── images/
+│   ├── single_line_cache_waveform.png    Day 7 — GTKWave capture
+│   └── hit_rate_vs_config_measured.png   Day 6 — sweep plot, committed (unlike results.csv)
 ├── build/                         gitignored — Verilator output, waveforms
 └── README.md
 ```
@@ -66,13 +69,15 @@ Associativity (`NUM_WAYS`) does **not** change this split — it only changes ho
 | Direct-mapped (8 sets, 1 way = 8-line capacity) | 144 | 48 | 75.0% | 26.00 cycles |
 | 2-way set-associative (8 sets, 2 ways = 16-line capacity) | 176 | 16 | 91.7% | 9.33 cycles |
 
-**Sweep (Day 6)** — measured via `sweep.sh` across 9 configurations; see `hit_rate_vs_config_measured.png`. Headline finding: for this trace, hit rate is a function of **total capacity** (`NUM_SETS x NUM_WAYS`) alone — the associativity sweep and the cache-size sweep collapse onto the identical curve, with a hard threshold at 16 lines (the trace's footprint). Below it: 75.0% forever. At or above it: 91.7%, with zero further gain from over-provisioning. This is a different bottleneck than the Day 2–4 trace exercised (that one isolated *conflict* misses via address aliasing; this one isolates *capacity* misses via a uniform sequential scan) — two traces were needed because one trace can't reveal both stories at once.
+**Sweep (Day 6)** — measured via `sweep.sh` across 9 configurations. Headline finding: for this trace, hit rate is a function of **total capacity** (`NUM_SETS x NUM_WAYS`) alone — the associativity sweep and the cache-size sweep collapse onto the identical curve, with a hard threshold at 16 lines (the trace's footprint). Below it: 75.0% forever. At or above it: 91.7%, with zero further gain from over-provisioning. This is a different bottleneck than the Day 2–4 trace exercised (that one isolated *conflict* misses via address aliasing; this one isolates *capacity* misses via a uniform sequential scan) — two traces were needed because one trace can't reveal both stories at once.
+
+![hit rate vs cache configuration](images/hit_rate_vs_config_measured.png)
 
 ## Waveforms
 
 ![single_line_cache waveform](images/single_line_cache_waveform.png)
 
-*(Captured from `tb_single_line_cache.vcd` in GTKWave — replace this file with your own screenshot.)*
+*(Captured from `tb_single_line_cache.vcd` in GTKWave.)*
 
 ## Running the simulations
 
