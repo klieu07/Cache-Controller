@@ -5,4 +5,5 @@ build/
 *.vcd
 
 # Sweep output -- regenerate with sweep.sh rather than committing stale numbers
-results.csv
+results.csvresults.csv
+*.vcd
